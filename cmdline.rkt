@@ -1,6 +1,7 @@
 #lang racket/base
 
-(provide command-line*)
+(provide command-line*
+         take-latest)
 
 (require syntax/parse/define
          racket/cmdline
@@ -51,6 +52,7 @@
                  combine)))
 
 (define (record _1 _2) #t)
+(define (take-latest new old) new)
 (define (make-collector combine init)
   (accumulator init
                init
@@ -77,9 +79,15 @@
     (raise-user-error 'command-line*
                       "Argument error: ~a and ~a cannot both be specified"
                       k conflicting-k))
+  (define specified-args
+    (for/list ([k (in-hash-keys collected-flags)]
+               #:when (specified-in? collected-flags k))
+      k))
   (define unspecified-mandatory-args
-    (filter-not (λ (flag) (specified-in? collected-flags flag))
-                mandatory-args))
+    (for/list ([(flag test) (in-hash mandatory-args)]
+               #:when (not (or (specified-in? collected-flags flag)
+                               (test specified-args))))
+      flag))
   (unless (empty? unspecified-mandatory-args)
     (raise-user-error 'command-line*
                       "Missing mandatory arguments: ~a"
@@ -101,11 +109,14 @@
            init-value
            collector-function
            conflicting-flags
-           mandatory-kw]
+           mandatory-kw
+           mandatory-unless-pred]
 
     [pattern
      [flags:expr name:expr desc:expr
                  {~optional {~and mandatory-kw #:mandatory}}
+                 {~optional {~seq #:mandatory-unless
+                                  mandatory-unless-pred:expr}}
                  {~or* {~and record-kw #:record}
                        {~seq #:collect [arg-name:expr
                                         collector:expr
@@ -143,11 +154,10 @@
                                (list (cons spec.name spec.conflicting-flags)
                                      ...
                                      ...))
-  #:with [mandatory-arg ...] (filter-map (λ (x)
-                                           (define spec-list (syntax->list x))
-                                           (and (= (length spec-list) 2)
-                                                (first spec-list)))
-                                         (syntax->list #'((spec.name {~? spec.mandatory-kw}) ... ...)))
+  #:with [{~alt (mandatory-arg _) (_)} ...]
+  #'((spec.name {~? spec.mandatory-kw}) ... ...)
+  #:with [{~alt (maybe-mandatory-arg test) (_)} ...]
+  #'((spec.name {~? spec.mandatory-unless-pred}) ... ...)
   (command-line
    {~? {~@ #:program name}}
    {~? {~@ #:argv argv}}
@@ -160,7 +170,8 @@
                       flag-init-hash))
      (check-conflicts! flags-hash
                        flag-conflict-hash
-                       (list mandatory-arg ...))
+                       (hash {~@ mandatory-arg (λ _ #f)} ...
+                             {~@ maybe-mandatory-arg test} ...))
      (cons (strip-accumulators flags-hash)
            (list {~? {~@ pos-arg ...}})))
    '(pos-arg-inferred-name ...)))
@@ -169,13 +180,18 @@
   (command-line*
    #:multi
    [("-n") 'thing
-           "A thing to process"
+           ("A thing to process" "Mandatory.")
            #:mandatory
            #:collect ["name" cons '()]]
    #:once-each
    [("-F" "--only-f") 'only-f
                       "Only do F's"
                       #:record]
+   [("-A") 'A
+           ("Only do F's"
+            "Mandatory unless -F specified.")
+           #:mandatory-unless (λ (flags) (member 'only-f flags))
+           #:record]
    [("-N" "--only-not-f") 'only-not-f
                           "Only do not F's"
                           #:record
