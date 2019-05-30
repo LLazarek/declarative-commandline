@@ -141,10 +141,12 @@
   (command-line* {~optional {~seq #:program name:expr}}
                  {~optional {~seq #:argv argv:expr}}
                  {~seq kw:keyword spec:flag-spec ...} ...
-                 {~optional {~seq #:args (pos-arg:id ...)}})
-  #:with [pos-arg-inferred-name ...] (map (λ (x)
-                                            (symbol->string (syntax->datum x)))
-                                          (syntax->list #'{~? (pos-arg ...) ()}))
+                 {~optional {~seq #:args {~or* (pos-arg:id ...)
+                                               pos-arg-rest:id}}})
+  #:with [pos-arg-inferred-name ...]
+  (map (λ (x)
+         (symbol->string (syntax->datum x)))
+       (syntax->list #'{~? (pos-arg ...) {~? (pos-arg-rest) ()}}))
   #:with flag-init-hash #'(hash {~@ spec.name
                                     (make-collector spec.collector-function
                                                     spec.init-value)}
@@ -164,7 +166,9 @@
    {~@ kw [spec.flags => spec.handler 'spec.help-list] ...}
    ...
    #:handlers
-   (λ (flag-accum {~? {~@ pos-arg ...}})
+   (λ {~? (flag-accum pos-arg ...)
+          {~? (flag-accum . pos-arg-rest)
+              (flag-accum)}}
      (define flags-hash
        (collect-flags flag-accum
                       flag-init-hash))
@@ -173,7 +177,9 @@
                        (hash {~@ mandatory-arg (λ _ #f)} ...
                              {~@ maybe-mandatory-arg test} ...))
      (cons (strip-accumulators flags-hash)
-           (list {~? {~@ pos-arg ...}})))
+           {~? (list pos-arg ...)
+               {~? pos-arg-rest
+                   '()}}))
    '(pos-arg-inferred-name ...)))
 
 (module+ main
