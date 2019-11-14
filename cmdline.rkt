@@ -1,6 +1,6 @@
 #lang racket/base
 
-(provide command-line*
+(provide command-line/declarative
          take-latest)
 
 (require syntax/parse/define
@@ -16,7 +16,7 @@
 ;; - specify mandatory args
 
 ;; Example syntax:
-#;(command-line*
+#;(command-line/declarative
    #:program "foobar"
    #:once-each
    [("-T" "--tests-only")
@@ -76,7 +76,7 @@
         #:when (specified-in? collected-flags k)
         [conflicting-k (in-list conflicts)]
         #:when (specified-in? collected-flags conflicting-k))
-    (raise-user-error 'command-line*
+    (raise-user-error 'command-line/declarative
                       "Argument error: ~a and ~a cannot both be specified"
                       k conflicting-k))
   (define specified-args
@@ -89,7 +89,7 @@
                                (test specified-args))))
       flag))
   (unless (empty? unspecified-mandatory-args)
-    (raise-user-error 'command-line*
+    (raise-user-error 'command-line/declarative
                       "Missing mandatory arguments: ~a"
                       unspecified-mandatory-args)))
 
@@ -138,11 +138,12 @@
                                   #''())]))
 
 (define-simple-macro
-  (command-line* {~optional {~seq #:program name:expr}}
-                 {~optional {~seq #:argv argv:expr}}
-                 {~seq kw:keyword spec:flag-spec ...} ...
-                 {~optional {~seq #:args {~or* (pos-arg:id ...)
-                                               pos-arg-rest:id}}})
+  (command-line/declarative
+   {~optional {~seq #:program name:expr}}
+   {~optional {~seq #:argv argv:expr}}
+   {~seq kw:keyword spec:flag-spec ...} ...
+   {~optional {~seq #:args {~or* (pos-arg:id ...)
+                                 pos-arg-rest:id}}})
   #:with [pos-arg-inferred-name ...] #'{~? (pos-arg ...) {~? (pos-arg-rest) ()}}
   #:with flag-init-hash #'(hash {~@ spec.name
                                     (make-collector spec.collector-function
@@ -180,7 +181,7 @@
    (map symbol->string '(pos-arg-inferred-name ...))))
 
 (module+ main
-  (command-line*
+  (command-line/declarative
    #:multi
    [("-n") 'thing
            ("A thing to process" "Mandatory.")
